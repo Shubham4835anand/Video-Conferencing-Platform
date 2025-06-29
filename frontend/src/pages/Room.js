@@ -6,7 +6,7 @@ const ICE_SERVERS = {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 };
 
-const socket = io('http://localhost:5000'); // Use your backend URL
+const socket = io('https://your-backend.onrender.com'); // 🔁 Change to your deployed backend
 
 function Room() {
   const { roomId } = useParams();
@@ -19,52 +19,50 @@ function Room() {
   const [isMuted, setIsMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
 
-  // 🔗 Invite Link
   const inviteLink = `${window.location.origin}/room/${roomId}`;
 
   useEffect(() => {
-    const startMedia = async () => {
+    const init = async () => {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
       localStreamRef.current = stream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
       socket.emit('join-room', { roomId });
 
       socket.on('user-joined', ({ userId }) => {
-        const peer = createPeer(userId, socket.id, stream);
+        const peer = createPeer(userId, stream);
         peersRef.current[userId] = peer;
       });
 
       socket.on('offer', handleReceiveOffer);
       socket.on('answer', handleReceiveAnswer);
-      socket.on('ice-candidate', handleNewICECandidate);
-      socket.on('user-disconnected', handleUserDisconnected);
-      socket.on('chat-message', (msg) => {
-        setChatMessages((prev) => [...prev, msg]);
-      });
+      socket.on('ice-candidate', handleNewICECandidateMsg);
+      socket.on('user-disconnected', handleUserDisconnect);
+      socket.on('chat-message', (msg) =>
+        setChatMessages((prev) => [...prev, msg])
+      );
     };
 
-    startMedia();
+    init();
 
     return () => {
-      Object.values(peersRef.current).forEach((pc) => pc.close());
+      Object.values(peersRef.current).forEach((pc) => pc?.close?.());
       socket.disconnect();
     };
   }, [roomId]);
 
-  const createPeer = (targetUserId, callerId, stream) => {
+  const createPeer = (userId, stream) => {
     const peer = new RTCPeerConnection(ICE_SERVERS);
+
     stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
     peer.onicecandidate = (e) => {
       if (e.candidate) {
         socket.emit('ice-candidate', {
-          target: targetUserId,
+          target: userId,
           candidate: e.candidate,
         });
       }
@@ -73,7 +71,7 @@ function Room() {
     peer.ontrack = (e) => {
       setRemoteStreams((prev) => ({
         ...prev,
-        [targetUserId]: e.streams[0],
+        [userId]: e.streams[0],
       }));
     };
 
@@ -82,8 +80,7 @@ function Room() {
       .then((offer) => peer.setLocalDescription(offer))
       .then(() => {
         socket.emit('offer', {
-          target: targetUserId,
-          callerId,
+          target: userId,
           sdp: peer.localDescription,
         });
       });
@@ -95,9 +92,9 @@ function Room() {
     const peer = new RTCPeerConnection(ICE_SERVERS);
     peersRef.current[callerId] = peer;
 
-    localStreamRef.current.getTracks().forEach((track) => {
-      peer.addTrack(track, localStreamRef.current);
-    });
+    localStreamRef.current
+      .getTracks()
+      .forEach((track) => peer.addTrack(track, localStreamRef.current));
 
     peer.onicecandidate = (e) => {
       if (e.candidate) {
@@ -131,25 +128,25 @@ function Room() {
     }
   };
 
-  const handleNewICECandidate = async ({ candidate, from }) => {
+  const handleNewICECandidateMsg = async ({ candidate, from }) => {
     const peer = peersRef.current[from];
     if (peer && candidate) {
       try {
         await peer.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error('ICE candidate error:', err);
+        console.error('ICE Error:', err);
       }
     }
   };
 
-  const handleUserDisconnected = ({ userId }) => {
+  const handleUserDisconnect = ({ userId }) => {
     if (peersRef.current[userId]) {
       peersRef.current[userId].close?.();
       delete peersRef.current[userId];
       setRemoteStreams((prev) => {
-        const updated = { ...prev };
-        delete updated[userId];
-        return updated;
+        const copy = { ...prev };
+        delete copy[userId];
+        return copy;
       });
     }
   };
@@ -181,82 +178,78 @@ function Room() {
   };
 
   const shareOnWhatsApp = () => {
-    const encodedLink = encodeURIComponent(`Join my video room: ${inviteLink}`);
-    window.open(`https://wa.me/?text=${encodedLink}`, '_blank');
+    const encoded = encodeURIComponent(`Join my video call: ${inviteLink}`);
+    window.open(`https://wa.me/?text=${encoded}`, '_blank');
   };
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: '20px',
-        padding: '10px',
-        flexWrap: 'wrap',
-      }}
-    >
-      <div>
-        <h3>Your Video</h3>
-        <video
-          ref={localVideoRef}
-          autoPlay
-          muted
-          playsInline
-          style={{ width: '300px' }}
-        />
+    <div style={{ padding: 20 }}>
+      <h2>Room: {roomId}</h2>
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
         <div>
-          <button onClick={toggleMute}>{isMuted ? 'Unmute' : 'Mute'}</button>
-          <button onClick={toggleCamera}>
-            {cameraOff ? 'Turn Camera On' : 'Turn Camera Off'}
-          </button>
-        </div>
-      </div>
-
-      <div>
-        <h3>Remote Participants</h3>
-        {Object.entries(remoteStreams).map(([userId, stream]) => (
+          <h4>Local</h4>
           <video
-            key={userId}
-            srcObject={stream}
+            ref={localVideoRef}
             autoPlay
+            muted
             playsInline
-            style={{ width: '300px', marginTop: '10px' }}
+            style={{ width: 300 }}
           />
-        ))}
-      </div>
+          <div>
+            <button onClick={toggleMute}>{isMuted ? 'Unmute' : 'Mute'}</button>
+            <button onClick={toggleCamera}>
+              {cameraOff ? 'Turn Camera On' : 'Turn Camera Off'}
+            </button>
+          </div>
+        </div>
 
-      <div style={{ width: '250px' }}>
-        <h3>Chat</h3>
-        <div
-          style={{
-            height: '300px',
-            overflowY: 'auto',
-            border: '1px solid gray',
-            padding: '5px',
-          }}
-        >
-          {chatMessages.map((msg, i) => (
-            <div key={i}>
-              <strong>{msg.sender === socket.id ? 'Me' : 'User'}:</strong>{' '}
-              {msg.message}
-            </div>
+        <div>
+          <h4>Remote Users</h4>
+          {Object.entries(remoteStreams).map(([id, stream]) => (
+            <video
+              key={id}
+              autoPlay
+              playsInline
+              style={{ width: 300, marginBottom: 10 }}
+              ref={(ref) => ref && (ref.srcObject = stream)}
+            />
           ))}
         </div>
-        <input
-          type='text'
-          value={message}
-          placeholder='Type message'
-          onChange={(e) => setMessage(e.target.value)}
-        />
-        <button onClick={sendMessage}>Send</button>
-      </div>
 
-      <div style={{ marginTop: '20px' }}>
-        <h3>Invite Others</h3>
-        <p>
-          Room Link: <code>{inviteLink}</code>
-        </p>
-        <button onClick={copyInviteLink}>Copy Link</button>
-        <button onClick={shareOnWhatsApp}>Share via WhatsApp</button>
+        <div>
+          <h4>Chat</h4>
+          <div
+            style={{
+              height: 200,
+              overflowY: 'auto',
+              border: '1px solid gray',
+              padding: 5,
+            }}
+          >
+            {chatMessages.map((msg, i) => (
+              <div key={i}>
+                <strong>{msg.sender === socket.id ? 'Me' : 'User'}:</strong>{' '}
+                {msg.message}
+              </div>
+            ))}
+          </div>
+          <input
+            type='text'
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder='Message'
+          />
+          <button onClick={sendMessage}>Send</button>
+        </div>
+
+        <div>
+          <h4>Invite</h4>
+          <p>
+            <code>{inviteLink}</code>
+          </p>
+          <button onClick={copyInviteLink}>Copy Link</button>
+          <button onClick={shareOnWhatsApp}>Share via WhatsApp</button>
+        </div>
       </div>
     </div>
   );

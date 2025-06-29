@@ -10,12 +10,11 @@ module.exports = function (io) {
 
       socket.to(roomId).emit('user-joined', socket.id);
 
-      socket.on('offer', (payload) => {
-        io.to(payload.target).emit('offer', payload);
+      socket.on('offer', ({ sdp, sender }) => {
+        socket.to(roomId).emit('receive-offer', { sdp, sender });
       });
-
-      socket.on('answer', (payload) => {
-        io.to(payload.target).emit('answer', payload);
+      socket.on('answer', ({ sdp, target }) => {
+        io.to(target).emit('receive-answer', { sdp, sender: socket.id });
       });
 
       socket.on('ice-candidate', (payload) => {
