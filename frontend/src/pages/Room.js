@@ -6,22 +6,24 @@ const ICE_SERVERS = {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 };
 
-const socket = io('http://localhost:5000'); // Update if hosted elsewhere
+const socket = io('http://localhost:5000'); // Use your backend URL
 
 function Room() {
   const { roomId } = useParams();
   const localVideoRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const peersRef = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
   const [chatMessages, setChatMessages] = useState([]);
   const [message, setMessage] = useState('');
   const [isMuted, setIsMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
 
-  const localStreamRef = useRef(null);
-  const peersRef = useRef({});
+  // 🔗 Invite Link
+  const inviteLink = `${window.location.origin}/room/${roomId}`;
 
   useEffect(() => {
-    async function startMedia() {
+    const startMedia = async () => {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
@@ -42,11 +44,10 @@ function Room() {
       socket.on('answer', handleReceiveAnswer);
       socket.on('ice-candidate', handleNewICECandidate);
       socket.on('user-disconnected', handleUserDisconnected);
-
       socket.on('chat-message', (msg) => {
         setChatMessages((prev) => [...prev, msg]);
       });
-    }
+    };
 
     startMedia();
 
@@ -58,10 +59,7 @@ function Room() {
 
   const createPeer = (targetUserId, callerId, stream) => {
     const peer = new RTCPeerConnection(ICE_SERVERS);
-
-    stream.getTracks().forEach((track) => {
-      peer.addTrack(track, stream);
-    });
+    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
     peer.onicecandidate = (e) => {
       if (e.candidate) {
@@ -139,7 +137,7 @@ function Room() {
       try {
         await peer.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error('Error adding received ICE candidate', err);
+        console.error('ICE candidate error:', err);
       }
     }
   };
@@ -149,9 +147,9 @@ function Room() {
       peersRef.current[userId].close?.();
       delete peersRef.current[userId];
       setRemoteStreams((prev) => {
-        const copy = { ...prev };
-        delete copy[userId];
-        return copy;
+        const updated = { ...prev };
+        delete updated[userId];
+        return updated;
       });
     }
   };
@@ -167,19 +165,37 @@ function Room() {
 
   const toggleMute = () => {
     const enabled = !isMuted;
-    localStreamRef.current.getAudioTracks()[0].enabled = !isMuted;
+    localStreamRef.current.getAudioTracks()[0].enabled = enabled;
     setIsMuted(!enabled);
   };
 
   const toggleCamera = () => {
     const enabled = !cameraOff;
-    localStreamRef.current.getVideoTracks()[0].enabled = !cameraOff;
+    localStreamRef.current.getVideoTracks()[0].enabled = enabled;
     setCameraOff(!enabled);
   };
 
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(inviteLink);
+    alert('Link copied to clipboard!');
+  };
+
+  const shareOnWhatsApp = () => {
+    const encodedLink = encodeURIComponent(`Join my video room: ${inviteLink}`);
+    window.open(`https://wa.me/?text=${encodedLink}`, '_blank');
+  };
+
   return (
-    <div style={{ display: 'flex', gap: '20px', padding: '10px' }}>
+    <div
+      style={{
+        display: 'flex',
+        gap: '20px',
+        padding: '10px',
+        flexWrap: 'wrap',
+      }}
+    >
       <div>
+        <h3>Your Video</h3>
         <video
           ref={localVideoRef}
           autoPlay
@@ -187,16 +203,7 @@ function Room() {
           playsInline
           style={{ width: '300px' }}
         />
-        {Object.entries(remoteStreams).map(([userId, stream]) => (
-          <video
-            key={userId}
-            srcObject={stream}
-            autoPlay
-            playsInline
-            style={{ width: '300px' }}
-          />
-        ))}
-        <div style={{ marginTop: '10px' }}>
+        <div>
           <button onClick={toggleMute}>{isMuted ? 'Unmute' : 'Mute'}</button>
           <button onClick={toggleCamera}>
             {cameraOff ? 'Turn Camera On' : 'Turn Camera Off'}
@@ -204,8 +211,21 @@ function Room() {
         </div>
       </div>
 
+      <div>
+        <h3>Remote Participants</h3>
+        {Object.entries(remoteStreams).map(([userId, stream]) => (
+          <video
+            key={userId}
+            srcObject={stream}
+            autoPlay
+            playsInline
+            style={{ width: '300px', marginTop: '10px' }}
+          />
+        ))}
+      </div>
+
       <div style={{ width: '250px' }}>
-        <h4>Chat</h4>
+        <h3>Chat</h3>
         <div
           style={{
             height: '300px',
@@ -228,6 +248,15 @@ function Room() {
           onChange={(e) => setMessage(e.target.value)}
         />
         <button onClick={sendMessage}>Send</button>
+      </div>
+
+      <div style={{ marginTop: '20px' }}>
+        <h3>Invite Others</h3>
+        <p>
+          Room Link: <code>{inviteLink}</code>
+        </p>
+        <button onClick={copyInviteLink}>Copy Link</button>
+        <button onClick={shareOnWhatsApp}>Share via WhatsApp</button>
       </div>
     </div>
   );
