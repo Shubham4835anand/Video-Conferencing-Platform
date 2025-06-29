@@ -1,0 +1,51 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+}
+
+.room-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.video-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  background: #000;
+  flex: 1;
+}
+
+.video-box {
+  width: 300px;
+  height: 200px;
+  margin: 8px;
+  background: #111;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.controls {
+  text-align: center;
+  padding: 10px;
+  background: #f0f0f0;
+}
+
+.chat-box {
+  padding: 10px;
+  border-top: 1px solid #ccc;
+  background: #fafafa;
+}
+
+.chat-messages {
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.chat-box input {
+  padding: 8px;
+  width: 80%;
+  margin-right: 5px;
+}
