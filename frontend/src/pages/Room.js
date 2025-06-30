@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 
 const ICE_SERVERS = {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 };
 
-const socket = io('https://video-conferencing-platform.onrender.com'); // use your deployed URL
+const socket = io('https://video-conferencing-platform.onrender.com');
 
 function Room() {
   const { roomId } = useParams();
+  const navigate = useNavigate();
   const localVideoRef = useRef();
   const localStreamRef = useRef();
   const peersRef = useRef({});
@@ -18,6 +19,7 @@ function Room() {
   const [msg, setMsg] = useState('');
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
+  const [participants, setParticipants] = useState([]);
 
   const inviteLink = `${window.location.origin}/room/${roomId}`;
 
@@ -33,6 +35,7 @@ function Room() {
       socket.emit('join-room', { roomId });
 
       socket.on('all-users', (users) => {
+        setParticipants(users);
         users.forEach((userId) => {
           const peer = createPeer(userId, localStreamRef.current);
           peersRef.current[userId] = peer;
@@ -40,13 +43,17 @@ function Room() {
       });
 
       socket.on('user-joined', ({ userId }) => {
-        // Do nothing here or handle reverse offer only if needed
+        setParticipants((prev) => [...prev, userId]);
       });
 
       socket.on('offer', handleOffer);
       socket.on('answer', handleAnswer);
       socket.on('ice-candidate', handleIce);
-      socket.on('user-disconnected', handleDisconnect);
+      socket.on('user-disconnected', ({ userId }) => {
+        handleDisconnect(userId);
+        setParticipants((prev) => prev.filter((id) => id !== userId));
+      });
+
       socket.on('chat-message', (m) => setMsgList((p) => [...p, m]));
     }
 
@@ -71,14 +78,13 @@ function Room() {
     };
 
     pc.ontrack = (e) => {
-      setRemoteStreams((p) => ({ ...p, [userId]: e.streams[0] }));
+      setRemoteStreams((prev) => ({ ...prev, [userId]: e.streams[0] }));
     };
 
-    pc.createOffer()
-      .then((o) => pc.setLocalDescription(o))
-      .then(() =>
-        socket.emit('offer', { target: userId, sdp: pc.localDescription })
-      );
+    pc.createOffer().then((o) => {
+      pc.setLocalDescription(o);
+      socket.emit('offer', { target: userId, sdp: o });
+    });
 
     return pc;
   }
@@ -101,7 +107,7 @@ function Room() {
     };
 
     pc.ontrack = (e) => {
-      setRemoteStreams((p) => ({ ...p, [callerId]: e.streams[0] }));
+      setRemoteStreams((prev) => ({ ...prev, [callerId]: e.streams[0] }));
     };
 
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -121,12 +127,12 @@ function Room() {
       pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
   }
 
-  function handleDisconnect({ userId }) {
+  function handleDisconnect(userId) {
     const pc = peersRef.current[userId];
     if (pc) pc.close();
     delete peersRef.current[userId];
-    setRemoteStreams((p) => {
-      const c = { ...p };
+    setRemoteStreams((prev) => {
+      const c = { ...prev };
       delete c[userId];
       return c;
     });
@@ -141,15 +147,15 @@ function Room() {
   }
 
   function toggleMute() {
-    const en = !muted;
-    localStreamRef.current.getAudioTracks()[0].enabled = en;
-    setMuted(!en);
+    const enabled = !muted;
+    localStreamRef.current.getAudioTracks()[0].enabled = enabled;
+    setMuted(!enabled);
   }
 
   function toggleCam() {
-    const en = !camOff;
-    localStreamRef.current.getVideoTracks()[0].enabled = en;
-    setCamOff(!en);
+    const enabled = !camOff;
+    localStreamRef.current.getVideoTracks()[0].enabled = enabled;
+    setCamOff(!enabled);
   }
 
   function copyLink() {
@@ -167,10 +173,10 @@ function Room() {
       <h2>Room: {roomId}</h2>
       <div className='video-grid'>
         <video ref={localVideoRef} autoPlay muted playsInline />
-        {Object.entries(remoteStreams).map(([no, st]) => (
+        {Object.entries(remoteStreams).map(([id, stream]) => (
           <video
-            key={no}
-            ref={(r) => r && (r.srcObject = st)}
+            key={id}
+            ref={(r) => r && (r.srcObject = stream)}
             autoPlay
             playsInline
           />
@@ -182,6 +188,15 @@ function Room() {
         <button onClick={toggleCam}>
           {camOff ? 'Camera On' : 'Camera Off'}
         </button>
+      </div>
+
+      <div>
+        <h4>Participants</h4>
+        <ul>
+          {participants.map((id) => (
+            <li key={id}>{id}</li>
+          ))}
+        </ul>
       </div>
 
       <div style={{ marginTop: 20 }}>

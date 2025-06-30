@@ -36,6 +36,10 @@ module.exports = function (io) {
       socket.on('disconnect', () => {
         socket.to(roomId).emit('user-disconnected', { userId: socket.id });
       });
+
+      socket.on('remove-user', ({ roomId, userId }) => {
+        io.to(userId).emit('removed');
+      });
     });
   });
 };
