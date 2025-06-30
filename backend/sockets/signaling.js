@@ -3,28 +3,30 @@ module.exports = function (io) {
     socket.on('join-room', ({ roomId }) => {
       socket.join(roomId);
 
-      const existingUsers = Array.from(
+      const usersInRoom = Array.from(
         io.sockets.adapter.rooms.get(roomId) || []
-      ).filter((id) => id !== socket.id);
-      existingUsers.forEach((id) => {
-        socket.emit('user-joined', { userId: id });
-      });
+      );
+      const otherUsers = usersInRoom.filter((id) => id !== socket.id);
 
+      // Send existing users to the new user
+      socket.emit('all-users', otherUsers);
+
+      // Notify existing users about the new user
       socket.to(roomId).emit('user-joined', { userId: socket.id });
 
-      socket.on('offer', ({ target, sdp }) => {
-        io.to(target).emit('offer', {
-          target: userId,
-          sdp: pc.localDescription,
-        });
+      socket.on('offer', ({ sdp, target }) => {
+        io.to(target).emit('offer', { sdp, callerId: socket.id });
       });
 
-      socket.on('answer', ({ target, sdp }) => {
+      socket.on('answer', ({ sdp, target }) => {
         io.to(target).emit('answer', { sdp, target: socket.id });
       });
 
-      socket.on('ice-candidate', ({ target, candidate }) => {
-        io.to(target).emit('ice-candidate', { candidate, from: socket.id });
+      socket.on('ice-candidate', (payload) => {
+        io.to(payload.target).emit('ice-candidate', {
+          ...payload,
+          from: socket.id,
+        });
       });
 
       socket.on('chat-message', (msg) => {

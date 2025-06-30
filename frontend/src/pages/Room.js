@@ -12,7 +12,6 @@ function Room() {
   const { roomId } = useParams();
   const localVideoRef = useRef();
   const localStreamRef = useRef();
-  const peer = new RTCPeerConnection(ICE_SERVERS);
   const peersRef = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
   const [msgList, setMsgList] = useState([]);
@@ -28,14 +27,20 @@ function Room() {
         video: true,
         audio: true,
       });
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+      localStreamRef.current = stream;
+      localVideoRef.current.srcObject = stream;
+
       socket.emit('join-room', { roomId });
 
+      socket.on('all-users', (users) => {
+        users.forEach((userId) => {
+          const peer = createPeer(userId, localStreamRef.current);
+          peersRef.current[userId] = peer;
+        });
+      });
+
       socket.on('user-joined', ({ userId }) => {
-        const peer = createPeer(userId, stream);
-        peersRef.current[userId] = peer;
+        // Do nothing here or handle reverse offer only if needed
       });
 
       socket.on('offer', handleOffer);
@@ -65,12 +70,8 @@ function Room() {
       }
     };
 
-    peer.ontrack = (event) => {
-      console.log('ontrack event from peer:', event.streams);
-      setRemoteStreams((prev) => ({
-        ...prev,
-        [userId]: event.streams[0],
-      }));
+    pc.ontrack = (e) => {
+      setRemoteStreams((p) => ({ ...p, [userId]: e.streams[0] }));
     };
 
     pc.createOffer()
@@ -86,10 +87,9 @@ function Room() {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peersRef.current[callerId] = pc;
 
-    console.log('Local stream tracks:', localStreamRef.current.getTracks());
     localStreamRef.current
       .getTracks()
-      .forEach((track) => console.log(track.kind, track.readyState));
+      .forEach((t) => pc.addTrack(t, localStreamRef.current));
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
@@ -167,14 +167,10 @@ function Room() {
       <h2>Room: {roomId}</h2>
       <div className='video-grid'>
         <video ref={localVideoRef} autoPlay muted playsInline />
-        {Object.entries(remoteStreams).map(([id, stream]) => (
+        {Object.entries(remoteStreams).map(([no, st]) => (
           <video
-            key={id}
-            ref={(video) => {
-              if (video && video.srcObject !== stream) {
-                video.srcObject = stream;
-              }
-            }}
+            key={no}
+            ref={(r) => r && (r.srcObject = st)}
             autoPlay
             playsInline
           />
