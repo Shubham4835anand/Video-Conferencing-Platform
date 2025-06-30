@@ -3,7 +3,6 @@ module.exports = function (io) {
     socket.on('join-room', ({ roomId }) => {
       socket.join(roomId);
 
-      // Notify user of existing users
       const existingUsers = Array.from(
         io.sockets.adapter.rooms.get(roomId) || []
       ).filter((id) => id !== socket.id);
@@ -11,7 +10,6 @@ module.exports = function (io) {
         socket.emit('user-joined', { userId: id });
       });
 
-      // Notify others
       socket.to(roomId).emit('user-joined', { userId: socket.id });
 
       socket.on('offer', ({ target, sdp }) => {

@@ -6,7 +6,7 @@ const ICE_SERVERS = {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 };
 
-const socket = io('https://your-backend.onrender.com'); // 🔁 Change to your deployed backend
+const socket = io('https://video-conferencing-platform.onrender.com'); // 🔁 Change to your deployed backend
 
 function Room() {
   const { roomId } = useParams();
