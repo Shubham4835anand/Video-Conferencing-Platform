@@ -33,8 +33,10 @@ function Room() {
       socket.emit('join-room', { roomId });
 
       socket.on('user-joined', ({ userId }) => {
-        const peer = createPeer(userId, stream);
-        peersRef.current[userId] = peer;
+        if (!peersRef.current[userId]) {
+          const peer = createPeer(userId, stream);
+          peersRef.current[userId] = peer;
+        }
       });
 
       socket.on('offer', handleReceiveOffer);
@@ -154,7 +156,7 @@ function Room() {
   const sendMessage = () => {
     if (message.trim()) {
       const msgObj = { sender: socket.id, message };
-      socket.emit('chat-message', msgObj);
+      socket.emit('chat-message', msgObj); // No roomId needed here
       setChatMessages((prev) => [...prev, msgObj]);
       setMessage('');
     }
@@ -249,6 +251,24 @@ function Room() {
           </p>
           <button onClick={copyInviteLink}>Copy Link</button>
           <button onClick={shareOnWhatsApp}>Share via WhatsApp</button>
+        </div>
+        <div className='video-grid'>
+          <video
+            ref={localVideoRef}
+            autoPlay
+            muted
+            playsInline
+            style={{ width: '100%' }}
+          />
+          {Object.entries(remoteStreams).map(([id, stream]) => (
+            <video
+              key={id}
+              autoPlay
+              playsInline
+              style={{ width: '100%' }}
+              ref={(ref) => ref && (ref.srcObject = stream)}
+            />
+          ))}
         </div>
       </div>
     </div>
