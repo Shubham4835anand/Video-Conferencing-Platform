@@ -12,6 +12,7 @@ function Room() {
   const { roomId } = useParams();
   const localVideoRef = useRef();
   const localStreamRef = useRef();
+  const peer = new RTCPeerConnection(ICE_SERVERS);
   const peersRef = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
   const [msgList, setMsgList] = useState([]);
