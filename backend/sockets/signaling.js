@@ -13,7 +13,10 @@ module.exports = function (io) {
       socket.to(roomId).emit('user-joined', { userId: socket.id });
 
       socket.on('offer', ({ target, sdp }) => {
-        io.to(target).emit('offer', { sdp, callerId: socket.id });
+        io.to(target).emit('offer', {
+          target: userId,
+          sdp: pc.localDescription,
+        });
       });
 
       socket.on('answer', ({ target, sdp }) => {

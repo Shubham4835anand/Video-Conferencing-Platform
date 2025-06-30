@@ -27,9 +27,9 @@ function Room() {
         video: true,
         audio: true,
       });
-      localStreamRef.current = stream;
-      localVideoRef.current.srcObject = stream;
-
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
       socket.emit('join-room', { roomId });
 
       socket.on('user-joined', ({ userId }) => {
@@ -64,8 +64,12 @@ function Room() {
       }
     };
 
-    pc.ontrack = (e) => {
-      setRemoteStreams((p) => ({ ...p, [userId]: e.streams[0] }));
+    peer.ontrack = (event) => {
+      console.log('ontrack event from peer:', event.streams);
+      setRemoteStreams((prev) => ({
+        ...prev,
+        [userId]: event.streams[0],
+      }));
     };
 
     pc.createOffer()
@@ -81,9 +85,10 @@ function Room() {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peersRef.current[callerId] = pc;
 
+    console.log('Local stream tracks:', localStreamRef.current.getTracks());
     localStreamRef.current
       .getTracks()
-      .forEach((t) => pc.addTrack(t, localStreamRef.current));
+      .forEach((track) => console.log(track.kind, track.readyState));
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
@@ -161,10 +166,14 @@ function Room() {
       <h2>Room: {roomId}</h2>
       <div className='video-grid'>
         <video ref={localVideoRef} autoPlay muted playsInline />
-        {Object.entries(remoteStreams).map(([no, st]) => (
+        {Object.entries(remoteStreams).map(([id, stream]) => (
           <video
-            key={no}
-            ref={(r) => r && (r.srcObject = st)}
+            key={id}
+            ref={(video) => {
+              if (video && video.srcObject !== stream) {
+                video.srcObject = stream;
+              }
+            }}
             autoPlay
             playsInline
           />
