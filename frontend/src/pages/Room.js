@@ -14,6 +14,7 @@ function Room() {
   const localVideoRef = useRef();
   const localStreamRef = useRef();
   const peersRef = useRef({});
+  const videoRefs = useRef({});
   const [remoteStreams, setRemoteStreams] = useState({});
   const [msgList, setMsgList] = useState([]);
   const [msg, setMsg] = useState('');
@@ -32,7 +33,7 @@ function Room() {
         audio: true,
       });
       localStreamRef.current = stream;
-      localVideoRef.current.srcObject = stream;
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
       socket.emit('join-room', { roomId });
 
@@ -58,10 +59,9 @@ function Room() {
       socket.on('answer', handleAnswer);
       socket.on('ice-candidate', handleIce);
       socket.on('user-disconnected', ({ userId }) => handleDisconnect(userId));
-
       socket.on('chat-message', (m) => setMsgList((p) => [...p, m]));
       socket.on('kicked', () => {
-        alert('You have been removed by the host.');
+        alert('You were removed by the host.');
         navigate('/');
       });
       socket.on('room-locked', () => setIsLocked(true));
@@ -78,9 +78,10 @@ function Room() {
 
   const createPeer = (userId) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
+
     localStreamRef.current
       .getTracks()
-      .forEach((track) => pc.addTrack(track, localStreamRef.current));
+      .forEach((t) => pc.addTrack(t, localStreamRef.current));
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
@@ -92,7 +93,15 @@ function Room() {
     };
 
     pc.ontrack = (e) => {
-      setRemoteStreams((prev) => ({ ...prev, [userId]: e.streams[0] }));
+      const remoteStream = e.streams[0];
+      setRemoteStreams((prev) => ({ ...prev, [userId]: remoteStream }));
+
+      // Dynamically assign to the correct video ref
+      setTimeout(() => {
+        if (videoRefs.current[userId]) {
+          videoRefs.current[userId].srcObject = remoteStream;
+        }
+      }, 100); // slight delay ensures ref is mounted
     };
 
     pc.createOffer()
@@ -113,20 +122,27 @@ function Room() {
       .forEach((t) => pc.addTrack(t, localStreamRef.current));
 
     pc.onicecandidate = (e) => {
-      if (e.candidate)
+      if (e.candidate) {
         socket.emit('ice-candidate', {
           target: callerId,
           candidate: e.candidate,
         });
+      }
     };
 
     pc.ontrack = (e) => {
-      setRemoteStreams((p) => ({ ...p, [callerId]: e.streams[0] }));
+      const remoteStream = e.streams[0];
+      setRemoteStreams((prev) => ({ ...prev, [callerId]: remoteStream }));
+      setTimeout(() => {
+        if (videoRefs.current[callerId]) {
+          videoRefs.current[callerId].srcObject = remoteStream;
+        }
+      }, 100);
     };
 
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    const ans = await pc.createAnswer();
-    await pc.setLocalDescription(ans);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
     socket.emit('answer', { target: callerId, sdp: pc.localDescription });
   }
 
@@ -145,6 +161,7 @@ function Room() {
     const pc = peersRef.current[userId];
     if (pc) pc.close();
     delete peersRef.current[userId];
+
     setRemoteStreams((prev) => {
       const copy = { ...prev };
       delete copy[userId];
@@ -194,13 +211,14 @@ function Room() {
           <p>You</p>
           <video ref={localVideoRef} autoPlay muted playsInline />
         </div>
-        {Object.entries(remoteStreams).map(([id, stream]) => (
+        {Object.entries(remoteStreams).map(([id, _]) => (
           <div key={id}>
             <p>{id === socket.id ? 'Me' : id.slice(-4)}</p>
             <video
-              ref={(r) => r && (r.srcObject = stream)}
+              ref={(ref) => (videoRefs.current[id] = ref)}
               autoPlay
               playsInline
+              muted={id === socket.id}
             />
             {isHost && id !== socket.id && (
               <button
@@ -234,7 +252,7 @@ function Room() {
         </ul>
       </div>
 
-      <div>
+      <div style={{ marginTop: 20 }}>
         <h4>Chat</h4>
         <div
           style={{ height: 200, overflowY: 'auto', border: '1px solid gray' }}
@@ -253,7 +271,7 @@ function Room() {
         <button onClick={sendMsg}>Send</button>
       </div>
 
-      <div>
+      <div style={{ marginTop: 20 }}>
         <h4>Invite</h4>
         <code>{inviteLink}</code>
         <button onClick={copyLink}>Copy</button>
