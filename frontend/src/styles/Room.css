@@ -1,0 +1,46 @@
+/* src/styles/Room.css */
+.video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 10px;
+}
+
+.vid-box {
+    position: relative;
+    background: black;
+    border-radius: 8px;
+}
+
+.vid-label {
+    position: absolute;
+    top: 4px;
+    left: 8px;
+    color: white;
+    font-size: 0.9rem;
+}
+
+.kick-btn {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    background: rgba(255, 0, 0, 0.7);
+    border: none;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.controls-panel,
+.chat-panel,
+.invite-panel,
+.participant-panel {
+    margin-top: 20px;
+}
+
+.chat-box {
+    height: 200px;
+    overflow-y: auto;
+    border: 1px solid gray;
+    padding: 8px;
+}

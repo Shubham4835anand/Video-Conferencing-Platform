@@ -4,6 +4,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const { Server } = require('socket.io');
 const authRoutes = require('./routes/auth');
+const roomRoutes = require('./routes/room');
 const signaling = require('./sockets/signaling');
 require('dotenv').config();
 
@@ -24,6 +25,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/room', roomRoutes);
 
 // MongoDB Connection
 mongoose
