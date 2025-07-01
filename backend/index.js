@@ -1,57 +1,57 @@
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
+const mongoose = require('mongoose');
 const { Server } = require('socket.io');
+const authRoutes = require('./routes/auth');
+const roomRoutes = require('./routes/room');
+const signaling = require('./sockets/signaling');
+require('dotenv').config();
 
+// Express App
 const app = express();
-app.use(cors());
+
+// Create HTTP Server
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
 
-const rooms = {}; // { roomId: { locked: false } }
+// Middleware
+app.use(
+  cors({
+    origin: '*', // Allow all origins during dev, restrict for production
+    credentials: true,
+  })
+);
+app.use(express.json());
 
-io.on('connection', (socket) => {
-  socket.on('join-room', ({ roomId }) => {
-    socket.join(roomId);
-    if (!rooms[roomId]) rooms[roomId] = { locked: false };
-    const users = Array.from(io.sockets.adapter.rooms.get(roomId) || []).filter(
-      (id) => id !== socket.id
-    );
-    socket.emit('all-users', users);
-    socket.to(roomId).emit('user-joined', { userId: socket.id });
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/room', roomRoutes);
+
+// MongoDB Connection
+mongoose
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch((err) => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
   });
 
-  socket.on('offer', ({ target, sdp }) =>
-    io.to(target).emit('offer', { sdp, callerId: socket.id })
-  );
-  socket.on('answer', ({ target, sdp }) =>
-    io.to(target).emit('answer', { sdp, target: socket.id })
-  );
-  socket.on('ice-candidate', ({ target, candidate }) =>
-    io.to(target).emit('ice-candidate', { from: socket.id, candidate })
-  );
-
-  socket.on('chat-message', (msg) =>
-    io.to(msg.roomId).emit('chat-message', msg)
-  );
-
-  socket.on('toggle-lock', ({ roomId }) => {
-    rooms[roomId].locked = !rooms[roomId].locked;
-    io.to(roomId).emit(rooms[roomId].locked ? 'room-locked' : 'room-unlocked');
-  });
-
-  socket.on('kick-user', ({ roomId, userId }) => {
-    io.to(userId).emit('kicked');
-    io.to(roomId).emit('user-disconnected', { userId });
-  });
-
-  socket.on('disconnecting', () => {
-    const roomsJoined = Array.from(socket.rooms);
-    roomsJoined.forEach((r) => {
-      if (r !== socket.id)
-        io.to(r).emit('user-disconnected', { userId: socket.id });
-    });
-  });
+// Socket.IO Server
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
 });
 
-server.listen(5000, () => console.log('Server running on port 5000'));
+// Signaling handlers
+signaling(io);
+
+// Start server
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () =>
+  console.log(`🚀 Server running on http://localhost:${PORT}`)
+);
